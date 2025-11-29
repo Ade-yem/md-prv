@@ -1,3 +1,4 @@
+import { useState, useRef, useEffect } from "react";
 import { ContentAreaProp } from "../types";
 
 export const ContentArea: React.FC<ContentAreaProp> = ({
@@ -8,13 +9,55 @@ export const ContentArea: React.FC<ContentAreaProp> = ({
   markedLoaded,
   getParsedMarkdown,
 }) => {
+  const [editorWidth, setEditorWidth] = useState(50); // Percentage
+  const [isResizing, setIsResizing] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+  };
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing || !containerRef.current) return;
+
+      const containerRect = containerRef.current.getBoundingClientRect();
+      const newWidth =
+        ((e.clientX - containerRect.left) / containerRect.width) * 100;
+
+      // Constrain between 20% and 80%
+      const constrainedWidth = Math.max(20, Math.min(80, newWidth));
+      setEditorWidth(constrainedWidth);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    if (isResizing) {
+      document.addEventListener("mousemove", handleMouseMove);
+      document.addEventListener("mouseup", handleMouseUp);
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+    }
+
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+  }, [isResizing]);
+
   return (
-    <div className="flex-1 flex overflow-hidden relative">
+    <div ref={containerRef} className="flex-1 flex overflow-hidden relative">
       {/* Editor Pane */}
       <div
-        className={`flex-1 bg-white h-full overflow-hidden flex flex-col ${
+        className={`bg-white h-full overflow-hidden flex flex-col ${
           activeTab === "preview" ? "hidden md:flex" : "flex"
         }`}
+        style={{ width: `${editorWidth}%`, minWidth: "20%", maxWidth: "80%" }}
       >
         <textarea
           ref={textareaRef}
@@ -23,21 +66,34 @@ export const ContentArea: React.FC<ContentAreaProp> = ({
             handleUpdateContent(e.target.value)
           }
           placeholder="Type your markdown here..."
-          className="flex-1 w-full h-full p-6 resize-none outline-none font-mono text-sm text-slate-700 leading-relaxed bg-white border-r border-slate-200"
+          className="flex-1 w-full h-full p-6 resize-none outline-none font-mono text-sm text-slate-700 leading-relaxed bg-white"
           spellCheck={false}
         />
-        <div className="bg-white border-t border-slate-100 px-4 py-2 text-xs text-slate-400 font-mono border-r border-slate-200">
+        <div className="bg-white border-t border-slate-100 px-4 py-2 text-xs text-slate-400 font-mono">
           {activeFile.content.length} characters •{" "}
           {activeFile.content.split(/\s+/).filter((w) => w.length > 0).length}{" "}
           words
         </div>
       </div>
 
+      {/* Resizer - Only visible on large screens when both panes are visible */}
+      {activeTab === "write" && (
+        <div
+          className={`hidden md:block w-1 bg-slate-200 hover:bg-blue-500 cursor-col-resize transition-colors relative group ${
+            isResizing ? "bg-blue-500" : ""
+          }`}
+          onMouseDown={handleMouseDown}
+        >
+          <div className="absolute inset-y-0 -left-1 -right-1 cursor-col-resize"></div>
+        </div>
+      )}
+
       {/* Preview Pane */}
       <div
-        className={`flex-1 bg-slate-50 h-full overflow-y-auto ${
+        className={`bg-slate-50 h-full overflow-y-auto ${
           activeTab === "write" ? "hidden md:block" : "block"
         }`}
+        style={{ width: `${100 - editorWidth}%`, minWidth: "20%" }}
       >
         <div className="max-w-3xl mx-auto p-6 min-h-full">
           {markedLoaded ? (
