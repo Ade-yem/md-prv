@@ -1,65 +1,107 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { 
-  FileUp, 
-  Download, 
-  Type, 
-  Bold, 
-  Italic, 
-  List, 
-  Code, 
-  Quote, 
-  Link as LinkIcon, 
-  Eye, 
-  PenTool, 
+import React, { useState, useEffect, useRef } from "react";
+import {
+  FileUp,
+  Download,
+  Type,
+  Bold,
+  Italic,
+  List,
+  Code,
+  Quote,
+  Link as LinkIcon,
+  Eye,
+  PenTool,
   Trash2,
   FileText,
-  LucideIcon
-} from 'lucide-react';
-
-// Interface for the 'marked' library loaded via CDN
-interface MarkedLibrary {
-  parse: (text: string) => string;
-  setOptions: (options: { gfm: boolean; breaks: boolean }) => void;
-}
-
-// Extend the Window interface to include 'marked'
-declare global {
-  interface Window {
-    marked?: MarkedLibrary;
-  }
-}
-
-interface ToolbarButtonProps {
-  icon: LucideIcon;
-  onClick: () => void;
-  label: string;
-}
-
-type TabType = 'write' | 'preview';
+  Plus,
+} from "lucide-react";
+import { MarkdownFile, TabType } from "./types";
+import { ToolbarButton } from "./components/toolbar";
+import { FileTab } from "./components/file-tab";
+import { ContentArea } from "./components/content";
 
 const MarkdownEditor: React.FC = () => {
-  const [content, setContent] = useState<string>("# Welcome to Markdown Editor\n\nStart typing on the **left** to see the preview on the **right**.\n\n## Features\n- Live preview\n- Upload & Download `.md` files\n- Mobile friendly\n\n```javascript\nconsole.log('Hello World');\n```");
-  const [fileName, setFileName] = useState<string>("document.md");
-  const [activeTab, setActiveTab] = useState<TabType>('write');
+  // State for multiple files
+  const [files, setFiles] = useState<MarkdownFile[]>([
+    {
+      id: "1",
+      name: "Welcome.md",
+      content:
+        "# Welcome to Markdown Editor\n\nStart typing on the **left** to see the preview on the **right**.\n\n## Multi-Tab Features\n- Click the `+` icon to add a new file\n- Click `x` on a tab to close it\n- Import opens a new tab automatically\n\n```javascript\nconsole.log('Hello World');\n```",
+    },
+  ]);
+
+  const [activeFileId, setActiveFileId] = useState<string>("1");
+  const [activeTab, setActiveTab] = useState<TabType>("write"); // Mobile toggle
   const [markedLoaded, setMarkedLoaded] = useState<boolean>(false);
-  
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Load 'marked' library dynamically for parsing
+  // Derived state for the currently active file
+  const activeFile = files.find((f) => f.id === activeFileId) || files[0];
+
+  // Load 'marked' library dynamically
   useEffect(() => {
-    const script = document.createElement('script');
+    const script = document.createElement("script");
     script.src = "https://cdn.jsdelivr.net/npm/marked/marked.min.js";
     script.async = true;
     script.onload = () => {
       setMarkedLoaded(true);
     };
     document.body.appendChild(script);
-    
+
     return () => {
       document.body.removeChild(script);
-    }
+    };
   }, []);
+
+  // --- File Management ---
+
+  const handleUpdateContent = (newContent: string) => {
+    setFiles((prev) =>
+      prev.map((f) =>
+        f.id === activeFileId ? { ...f, content: newContent } : f
+      )
+    );
+  };
+
+  const handleUpdateName = (newName: string) => {
+    setFiles((prev) =>
+      prev.map((f) => (f.id === activeFileId ? { ...f, name: newName } : f))
+    );
+  };
+
+  const handleNewFile = () => {
+    const newId = Date.now().toString();
+    const newFile: MarkdownFile = {
+      id: newId,
+      name: "Untitled.md",
+      content: "",
+    };
+    setFiles([...files, newFile]);
+    setActiveFileId(newId);
+  };
+
+  const handleCloseFile = (e: React.MouseEvent, idToDelete: string) => {
+    e.stopPropagation(); // Prevent switching to the tab we are closing
+
+    if (files.length === 1) {
+      // If closing the last file, just clear it instead of removing
+      setFiles([
+        { id: Date.now().toString(), name: "Untitled.md", content: "" },
+      ]);
+      return;
+    }
+
+    const newFiles = files.filter((f) => f.id !== idToDelete);
+    setFiles(newFiles);
+
+    // If we closed the active file, switch to the last one available
+    if (activeFileId === idToDelete) {
+      setActiveFileId(newFiles[newFiles.length - 1].id);
+    }
+  };
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -67,38 +109,51 @@ const MarkdownEditor: React.FC = () => {
       const reader = new FileReader();
       reader.onload = (e: ProgressEvent<FileReader>) => {
         const text = e.target?.result;
-        if (typeof text === 'string') {
-          setContent(text);
-          setFileName(file.name);
+        if (typeof text === "string") {
+          const newId = Date.now().toString();
+          const newFile: MarkdownFile = {
+            id: newId,
+            name: file.name,
+            content: text,
+          };
+          setFiles([...files, newFile]);
+          setActiveFileId(newId);
         }
       };
       reader.readAsText(file);
+      // Reset input so same file can be selected again if needed
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
   const handleDownload = () => {
     const element = document.createElement("a");
-    const file = new Blob([content], { type: 'text/markdown' });
+    const file = new Blob([activeFile.content], { type: "text/markdown" });
     element.href = URL.createObjectURL(file);
-    element.download = fileName.endsWith('.md') ? fileName : `${fileName}.md`;
+    element.download = activeFile.name.endsWith(".md")
+      ? activeFile.name
+      : `${activeFile.name}.md`;
     document.body.appendChild(element);
     element.click();
     document.body.removeChild(element);
   };
 
-  const insertSyntax = (prefix: string, suffix: string = '') => {
+  // --- Editor Operations ---
+
+  const insertSyntax = (prefix: string, suffix: string = "") => {
     const textarea = textareaRef.current;
     if (!textarea) return;
 
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
-    
-    const selectedText = content.substring(start, end);
-    const beforeText = content.substring(0, start);
-    const afterText = content.substring(end);
+
+    const currentContent = activeFile.content;
+    const selectedText = currentContent.substring(start, end);
+    const beforeText = currentContent.substring(0, start);
+    const afterText = currentContent.substring(end);
 
     const newText = `${beforeText}${prefix}${selectedText}${suffix}${afterText}`;
-    setContent(newText);
+    handleUpdateContent(newText);
 
     // Reset cursor position and focus
     setTimeout(() => {
@@ -111,12 +166,8 @@ const MarkdownEditor: React.FC = () => {
     if (!markedLoaded || !window.marked) {
       return { __html: "Loading parser..." };
     }
-    // Configure marked to handle line breaks as <br>
-    window.marked.setOptions({
-        gfm: true,
-        breaks: true,
-    });
-    return { __html: window.marked.parse(content) };
+    window.marked.setOptions({ gfm: true, breaks: true });
+    return { __html: window.marked.parse(activeFile.content) };
   };
 
   const handleTriggerFileUpload = () => {
@@ -125,65 +176,43 @@ const MarkdownEditor: React.FC = () => {
 
   return (
     <div className="flex flex-col h-screen bg-slate-50 text-slate-800 font-sans overflow-hidden">
-      {/* --- CSS for the Preview Content --- */}
-      <style>{`
-        .markdown-body {
-          line-height: 1.6;
-          color: #334155;
-        }
-        .markdown-body h1 { font-size: 2rem; font-weight: 800; margin-bottom: 1rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.5rem; color: #1e293b; }
-        .markdown-body h2 { font-size: 1.5rem; font-weight: 700; margin-top: 1.5rem; margin-bottom: 0.75rem; color: #1e293b; }
-        .markdown-body h3 { font-size: 1.25rem; font-weight: 600; margin-top: 1.25rem; margin-bottom: 0.5rem; color: #1e293b; }
-        .markdown-body p { margin-bottom: 1rem; }
-        .markdown-body ul { list-style-type: disc; padding-left: 1.5rem; margin-bottom: 1rem; }
-        .markdown-body ol { list-style-type: decimal; padding-left: 1.5rem; margin-bottom: 1rem; }
-        .markdown-body blockquote { border-left: 4px solid #3b82f6; background-color: #eff6ff; padding: 0.5rem 1rem; margin-bottom: 1rem; font-style: italic; color: #475569; }
-        .markdown-body code { background-color: #f1f5f9; padding: 0.2rem 0.4rem; border-radius: 4px; font-family: monospace; font-size: 0.9em; color: #ef4444; }
-        .markdown-body pre { background-color: #1e293b; padding: 1rem; border-radius: 8px; overflow-x: auto; margin-bottom: 1rem; }
-        .markdown-body pre code { background-color: transparent; color: #e2e8f0; padding: 0; font-size: 0.85em; }
-        .markdown-body a { color: #2563eb; text-decoration: underline; }
-        .markdown-body a:hover { color: #1d4ed8; }
-        .markdown-body img { max-width: 100%; border-radius: 8px; margin: 1rem 0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
-        .markdown-body hr { border: 0; border-top: 2px solid #e2e8f0; margin: 2rem 0; }
-        .markdown-body table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; }
-        .markdown-body th, .markdown-body td { border: 1px solid #cbd5e1; padding: 0.5rem; text-align: left; }
-        .markdown-body th { background-color: #f8fafc; font-weight: 600; }
-      `}</style>
-
-      {/* --- Header --- */}
-      <header className="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between shadow-sm z-10">
-        <div className="flex items-center gap-2">
-          <div className="bg-blue-600 p-2 rounded-lg">
+      {/* --- Main Header --- */}
+      <header className="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between shadow-sm z-20 relative">
+        <div className="flex items-center gap-3 flex-1 min-w-0">
+          <div className="bg-blue-600 p-2 rounded-lg shrink-0">
             <FileText className="w-5 h-5 text-white" />
           </div>
-          <div className="flex flex-col">
-            <h1 className="text-lg font-bold text-slate-800 leading-none">MD Editor</h1>
-            <input 
-              type="text" 
-              value={fileName}
-              onChange={(e) => setFileName(e.target.value)}
-              className="text-xs text-slate-500 bg-transparent border-none focus:ring-0 p-0 hover:text-blue-600 cursor-text"
+          <div className="flex flex-col min-w-0 flex-1">
+            <h1 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-0.5">
+              Markdown Editor
+            </h1>
+            <input
+              type="text"
+              value={activeFile.name}
+              onChange={(e) => handleUpdateName(e.target.value)}
+              className="text-sm font-semibold text-slate-800 bg-transparent border-none focus:ring-0 p-0 hover:text-blue-600 cursor-text w-full truncate"
+              placeholder="Filename"
             />
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <input 
-            type="file" 
-            ref={fileInputRef} 
-            onChange={handleFileUpload} 
-            accept=".md,.txt" 
-            className="hidden" 
+        <div className="flex items-center gap-2 ml-4">
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileUpload}
+            accept=".md,.txt"
+            className="hidden"
           />
-          <button 
+          <button
             onClick={handleTriggerFileUpload}
             className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors"
           >
             <FileUp className="w-4 h-4" />
             <span className="hidden sm:inline">Import</span>
           </button>
-          
-          <button 
+
+          <button
             onClick={handleDownload}
             className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors shadow-sm"
           >
@@ -193,93 +222,109 @@ const MarkdownEditor: React.FC = () => {
         </div>
       </header>
 
+      {/* --- File Tabs --- */}
+      <div className="bg-slate-100 border-b border-slate-200 px-2 pt-2 flex items-end gap-1 overflow-x-auto scrollbar-hide">
+        {files.map((file) => (
+          <FileTab
+            key={file.id}
+            activeFileId={activeFileId}
+            file={file}
+            setActiveFileId={setActiveFileId}
+            handleCloseFile={handleCloseFile}
+          />
+        ))}
+        <button
+          onClick={handleNewFile}
+          className="p-2 mb-1 text-slate-500 hover:text-blue-600 hover:bg-slate-200 rounded-md transition-colors"
+          title="New File"
+        >
+          <Plus className="w-4 h-4" />
+        </button>
+      </div>
+
       {/* --- Toolbar --- */}
-      <div className="bg-white border-b border-slate-200 px-2 sm:px-4 py-2 flex items-center gap-1 sm:gap-2 overflow-x-auto">
-        <ToolbarButton icon={Bold} label="Bold" onClick={() => insertSyntax('**', '**')} />
-        <ToolbarButton icon={Italic} label="Italic" onClick={() => insertSyntax('*', '*')} />
+      <div className="bg-white border-b border-slate-200 px-2 sm:px-4 py-2 flex items-center gap-1 sm:gap-2 overflow-x-auto z-10 shadow-sm">
+        <ToolbarButton
+          icon={Bold}
+          label="Bold"
+          onClick={() => insertSyntax("**", "**")}
+        />
+        <ToolbarButton
+          icon={Italic}
+          label="Italic"
+          onClick={() => insertSyntax("*", "*")}
+        />
         <div className="w-px h-6 bg-slate-200 mx-1"></div>
-        <ToolbarButton icon={Type} label="Heading" onClick={() => insertSyntax('## ')} />
-        <ToolbarButton icon={Quote} label="Quote" onClick={() => insertSyntax('> ')} />
-        <ToolbarButton icon={List} label="List" onClick={() => insertSyntax('- ')} />
+        <ToolbarButton
+          icon={Type}
+          label="Heading"
+          onClick={() => insertSyntax("## ")}
+        />
+        <ToolbarButton
+          icon={Quote}
+          label="Quote"
+          onClick={() => insertSyntax("> ")}
+        />
+        <ToolbarButton
+          icon={List}
+          label="List"
+          onClick={() => insertSyntax("- ")}
+        />
         <div className="w-px h-6 bg-slate-200 mx-1"></div>
-        <ToolbarButton icon={Code} label="Code Block" onClick={() => insertSyntax('```\n', '\n```')} />
-        <ToolbarButton icon={LinkIcon} label="Link" onClick={() => insertSyntax('[', '](url)')} />
+        <ToolbarButton
+          icon={Code}
+          label="Code Block"
+          onClick={() => insertSyntax("```\n", "\n```")}
+        />
+        <ToolbarButton
+          icon={LinkIcon}
+          label="Link"
+          onClick={() => insertSyntax("[", "](url)")}
+        />
         <div className="flex-1"></div>
-        <button 
-          onClick={() => setContent('')} 
+        <button
+          onClick={() => handleUpdateContent("")}
           className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors"
-          title="Clear All"
+          title="Clear Current File"
         >
           <Trash2 className="w-4 h-4" />
         </button>
       </div>
 
-      {/* --- Mobile Tabs --- */}
+      {/* --- Mobile View Toggle --- */}
       <div className="md:hidden flex border-b border-slate-200 bg-slate-50">
-        <button 
-          onClick={() => setActiveTab('write')}
-          className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 ${activeTab === 'write' ? 'text-blue-600 border-b-2 border-blue-600 bg-white' : 'text-slate-500'}`}
+        <button
+          onClick={() => setActiveTab("write")}
+          className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 ${
+            activeTab === "write"
+              ? "text-blue-600 border-b-2 border-blue-600 bg-white"
+              : "text-slate-500"
+          }`}
         >
           <PenTool className="w-4 h-4" /> Write
         </button>
-        <button 
-          onClick={() => setActiveTab('preview')}
-          className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 ${activeTab === 'preview' ? 'text-blue-600 border-b-2 border-blue-600 bg-white' : 'text-slate-500'}`}
+        <button
+          onClick={() => setActiveTab("preview")}
+          className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 ${
+            activeTab === "preview"
+              ? "text-blue-600 border-b-2 border-blue-600 bg-white"
+              : "text-slate-500"
+          }`}
         >
           <Eye className="w-4 h-4" /> Preview
         </button>
       </div>
 
       {/* --- Main Content Area --- */}
-      <div className="flex-1 flex overflow-hidden relative">
-        
-        {/* Editor Pane */}
-        <div className={`flex-1 bg-white h-full overflow-hidden flex flex-col ${activeTab === 'preview' ? 'hidden md:flex' : 'flex'}`}>
-          <textarea
-            ref={textareaRef}
-            value={content}
-            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setContent(e.target.value)}
-            placeholder="Type your markdown here..."
-            className="flex-1 w-full h-full p-6 resize-none outline-none font-mono text-sm text-slate-700 leading-relaxed bg-white border-r border-slate-200"
-            spellCheck={false}
-          />
-          <div className="bg-white border-t border-slate-100 px-4 py-2 text-xs text-slate-400 font-mono border-r border-slate-200">
-            {content.length} characters • {content.split(/\s+/).filter(w => w.length > 0).length} words
-          </div>
-        </div>
-
-        {/* Preview Pane */}
-        <div className={`flex-1 bg-slate-50 h-full overflow-y-auto ${activeTab === 'write' ? 'hidden md:block' : 'block'}`}>
-          <div className="max-w-3xl mx-auto p-6 min-h-full">
-            {markedLoaded ? (
-               <div 
-                 className="markdown-body"
-                 dangerouslySetInnerHTML={getParsedMarkdown()} 
-               />
-            ) : (
-              <div className="flex items-center justify-center h-full text-slate-400 gap-2">
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-slate-400"></div>
-                Initializing Preview...
-              </div>
-            )}
-          </div>
-        </div>
-
-      </div>
+      <ContentArea
+        activeTab={activeTab}
+        textareaRef={textareaRef}
+        activeFile={activeFile}
+        handleUpdateContent={handleUpdateContent}
+        markedLoaded={markedLoaded}
+        getParsedMarkdown={getParsedMarkdown}
+      />
     </div>
   );
 };
-
-// Helper component for toolbar buttons
-const ToolbarButton: React.FC<ToolbarButtonProps> = ({ icon: Icon, onClick, label }) => (
-  <button
-    onClick={onClick}
-    className="p-2 text-slate-600 hover:bg-slate-100 hover:text-blue-600 rounded-md transition-colors flex items-center justify-center min-w-[36px]"
-    title={label}
-  >
-    <Icon className="w-4 h-4" />
-  </button>
-);
-
 export default MarkdownEditor;
-
