@@ -12,16 +12,39 @@ import {
   Eye, 
   PenTool, 
   Trash2,
-  FileText
+  FileText,
+  LucideIcon
 } from 'lucide-react';
 
-const MarkdownEditor = () => {
-  const [content, setContent] = useState("# Welcome to Markdown Editor\n\nStart typing on the **left** to see the preview on the **right**.\n\n## Features\n- Live preview\n- Upload & Download `.md` files\n- Mobile friendly\n\n```javascript\nconsole.log('Hello World');\n```");
-  const [fileName, setFileName] = useState("document.md");
-  const [activeTab, setActiveTab] = useState('write'); // 'write' or 'preview' (mostly for mobile)
-  const [markedLoaded, setMarkedLoaded] = useState(false);
-  const fileInputRef = useRef(null);
-  const textareaRef = useRef(null);
+// Interface for the 'marked' library loaded via CDN
+interface MarkedLibrary {
+  parse: (text: string) => string;
+  setOptions: (options: { gfm: boolean; breaks: boolean }) => void;
+}
+
+// Extend the Window interface to include 'marked'
+declare global {
+  interface Window {
+    marked?: MarkedLibrary;
+  }
+}
+
+interface ToolbarButtonProps {
+  icon: LucideIcon;
+  onClick: () => void;
+  label: string;
+}
+
+type TabType = 'write' | 'preview';
+
+const MarkdownEditor: React.FC = () => {
+  const [content, setContent] = useState<string>("# Welcome to Markdown Editor\n\nStart typing on the **left** to see the preview on the **right**.\n\n## Features\n- Live preview\n- Upload & Download `.md` files\n- Mobile friendly\n\n```javascript\nconsole.log('Hello World');\n```");
+  const [fileName, setFileName] = useState<string>("document.md");
+  const [activeTab, setActiveTab] = useState<TabType>('write');
+  const [markedLoaded, setMarkedLoaded] = useState<boolean>(false);
+  
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Load 'marked' library dynamically for parsing
   useEffect(() => {
@@ -38,13 +61,16 @@ const MarkdownEditor = () => {
     }
   }, []);
 
-  const handleFileUpload = (event) => {
-    const file = event.target.files[0];
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onload = (e) => {
-        setContent(e.target.result);
-        setFileName(file.name);
+      reader.onload = (e: ProgressEvent<FileReader>) => {
+        const text = e.target?.result;
+        if (typeof text === 'string') {
+          setContent(text);
+          setFileName(file.name);
+        }
       };
       reader.readAsText(file);
     }
@@ -60,12 +86,13 @@ const MarkdownEditor = () => {
     document.body.removeChild(element);
   };
 
-  const insertSyntax = (prefix, suffix = '') => {
+  const insertSyntax = (prefix: string, suffix: string = '') => {
     const textarea = textareaRef.current;
     if (!textarea) return;
 
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
+    
     const selectedText = content.substring(start, end);
     const beforeText = content.substring(0, start);
     const afterText = content.substring(end);
@@ -80,9 +107,9 @@ const MarkdownEditor = () => {
     }, 0);
   };
 
-  const getParsedMarkdown = () => {
-    if (!markedLoaded || typeof window.marked === 'undefined') {
-      return "Loading parser...";
+  const getParsedMarkdown = (): { __html: string } => {
+    if (!markedLoaded || !window.marked) {
+      return { __html: "Loading parser..." };
     }
     // Configure marked to handle line breaks as <br>
     window.marked.setOptions({
@@ -90,6 +117,10 @@ const MarkdownEditor = () => {
         breaks: true,
     });
     return { __html: window.marked.parse(content) };
+  };
+
+  const handleTriggerFileUpload = () => {
+    fileInputRef.current?.click();
   };
 
   return (
@@ -145,7 +176,7 @@ const MarkdownEditor = () => {
             className="hidden" 
           />
           <button 
-            onClick={() => fileInputRef.current.click()}
+            onClick={handleTriggerFileUpload}
             className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors"
           >
             <FileUp className="w-4 h-4" />
@@ -207,10 +238,10 @@ const MarkdownEditor = () => {
           <textarea
             ref={textareaRef}
             value={content}
-            onChange={(e) => setContent(e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setContent(e.target.value)}
             placeholder="Type your markdown here..."
             className="flex-1 w-full h-full p-6 resize-none outline-none font-mono text-sm text-slate-700 leading-relaxed bg-white border-r border-slate-200"
-            spellCheck="false"
+            spellCheck={false}
           />
           <div className="bg-white border-t border-slate-100 px-4 py-2 text-xs text-slate-400 font-mono border-r border-slate-200">
             {content.length} characters • {content.split(/\s+/).filter(w => w.length > 0).length} words
@@ -240,7 +271,7 @@ const MarkdownEditor = () => {
 };
 
 // Helper component for toolbar buttons
-const ToolbarButton = ({ icon: Icon, onClick, label }) => (
+const ToolbarButton: React.FC<ToolbarButtonProps> = ({ icon: Icon, onClick, label }) => (
   <button
     onClick={onClick}
     className="p-2 text-slate-600 hover:bg-slate-100 hover:text-blue-600 rounded-md transition-colors flex items-center justify-center min-w-[36px]"
