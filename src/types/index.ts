@@ -18,10 +18,14 @@ export interface ToolbarButtonProps {
     label: string;
 }
 
-export interface MarkdownFile {
+export type FileType = "markdown" | "pdf" | "word" | "rtf";
+
+export interface DocumentFile {
     id: string;
     name: string;
     content: string;
+    fileType: FileType;
+    rawData?: ArrayBuffer | Uint8Array; // For binary files like PDF, Word
 }
 
 export type TabType = "write" | "preview";
@@ -29,17 +33,20 @@ export type TabType = "write" | "preview";
 export interface FileTabProps {
     activeFileId: string;
     setActiveFileId: Dispatch<React.SetStateAction<string>>
-    file: MarkdownFile,
+    file: DocumentFile,
     handleCloseFile: (e: React.MouseEvent<Element, MouseEvent>, idToDelete: string) => void
 }
 
 export interface ContentAreaProp {
     activeTab: TabType;
     textareaRef: React.RefObject<HTMLTextAreaElement>;
-    activeFile: MarkdownFile;
+    activeFile: DocumentFile;
     handleUpdateContent: (newContent: string) => void;
     markedLoaded: boolean;
     getParsedMarkdown: () => {
         __html: string;
     }
 }
+
+// Legacy type alias for backward compatibility during migration
+export type MarkdownFile = DocumentFile;

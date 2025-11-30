@@ -1,5 +1,8 @@
 import { useState, useRef, useEffect } from "react";
 import { ContentAreaProp } from "../types";
+import { PDFReader } from "./pdf-reader";
+import { WordReader } from "./word-reader";
+import { RTFEditor } from "./rtf-editor";
 
 export const ContentArea: React.FC<ContentAreaProp> = ({
   activeTab,
@@ -63,6 +66,26 @@ export const ContentArea: React.FC<ContentAreaProp> = ({
     };
   }, [isResizing, isLargeScreen]);
 
+  // Route to appropriate component based on file type
+  if (activeFile.fileType === "pdf") {
+    return <PDFReader file={activeFile} />;
+  }
+
+  if (activeFile.fileType === "word") {
+    return <WordReader file={activeFile} />;
+  }
+
+  if (activeFile.fileType === "rtf") {
+    return (
+      <RTFEditor
+        file={activeFile}
+        activeTab={activeTab}
+        handleUpdateContent={handleUpdateContent}
+      />
+    );
+  }
+
+  // Markdown editor (default)
   return (
     <div ref={containerRef} className="flex-1 flex overflow-hidden relative">
       {/* Editor Pane */}
