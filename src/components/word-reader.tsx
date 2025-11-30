@@ -18,15 +18,20 @@ export const WordReader: React.FC<WordReaderProps> = ({ file }) => {
         setError(null);
 
         let arrayBuffer: ArrayBuffer;
-        
+
         if (file.rawData) {
-          arrayBuffer = file.rawData instanceof ArrayBuffer
-            ? file.rawData
-            : file.rawData.buffer;
+          if (file.rawData instanceof ArrayBuffer) {
+            arrayBuffer = file.rawData;
+          } else {
+            // Uint8Array - create a new ArrayBuffer by copying the data
+            const uint8Array = file.rawData;
+            arrayBuffer = new ArrayBuffer(uint8Array.byteLength);
+            new Uint8Array(arrayBuffer).set(uint8Array);
+          }
         } else {
           // Try to convert content to ArrayBuffer
-          if (file.content.startsWith('data:')) {
-            const base64 = file.content.split(',')[1];
+          if (file.content.startsWith("data:")) {
+            const base64 = file.content.split(",")[1];
             const binaryString = atob(base64);
             const bytes = new Uint8Array(binaryString.length);
             for (let i = 0; i < binaryString.length; i++) {
@@ -49,13 +54,13 @@ export const WordReader: React.FC<WordReaderProps> = ({ file }) => {
         }
 
         // Check if it's .docx (mammoth supports) or .doc (not directly supported)
-        const isDocx = file.name.toLowerCase().endsWith('.docx');
-        
+        const isDocx = file.name.toLowerCase().endsWith(".docx");
+
         if (isDocx) {
           // Use mammoth to convert .docx to HTML
           const result = await mammoth.convertToHtml({ arrayBuffer });
           setHtmlContent(result.value);
-          
+
           if (result.messages.length > 0) {
             console.warn("Word conversion warnings:", result.messages);
           }
@@ -67,7 +72,9 @@ export const WordReader: React.FC<WordReaderProps> = ({ file }) => {
           );
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load Word document");
+        setError(
+          err instanceof Error ? err.message : "Failed to load Word document"
+        );
       } finally {
         setLoading(false);
       }
@@ -103,13 +110,12 @@ export const WordReader: React.FC<WordReaderProps> = ({ file }) => {
           className="word-content prose prose-slate max-w-none"
           dangerouslySetInnerHTML={{ __html: htmlContent }}
           style={{
-            fontFamily: 'system-ui, -apple-system, sans-serif',
-            lineHeight: '1.6',
-            color: '#334155',
+            fontFamily: "system-ui, -apple-system, sans-serif",
+            lineHeight: "1.6",
+            color: "#334155",
           }}
         />
       </div>
     </div>
   );
 };
-

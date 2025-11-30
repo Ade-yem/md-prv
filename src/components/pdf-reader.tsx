@@ -16,30 +16,35 @@ export const PDFReader: React.FC<PDFReaderProps> = ({ file }) => {
   const [pageNumber, setPageNumber] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [pdfData, setPdfData] = useState<Uint8Array | null>(null);
+  const [pdfData, setPdfData] = useState<ArrayBuffer | null>(null);
 
   useEffect(() => {
-    // Convert file content/rawData to Uint8Array for PDF.js
+    // Convert file content/rawData to ArrayBuffer for PDF.js
     const loadPdf = async () => {
       try {
         setLoading(true);
         setError(null);
 
-        let data: Uint8Array;
+        let data: ArrayBuffer;
         if (file.rawData) {
-          data = file.rawData instanceof Uint8Array 
-            ? file.rawData 
-            : new Uint8Array(file.rawData);
+          if (file.rawData instanceof ArrayBuffer) {
+            data = file.rawData;
+          } else {
+            // Uint8Array - create a new ArrayBuffer by copying the data
+            const uint8Array = file.rawData;
+            data = new ArrayBuffer(uint8Array.byteLength);
+            new Uint8Array(data).set(uint8Array);
+          }
         } else {
           // If content is base64 or data URL, parse it
-          if (file.content.startsWith('data:')) {
-            const base64 = file.content.split(',')[1];
+          if (file.content.startsWith("data:")) {
+            const base64 = file.content.split(",")[1];
             const binaryString = atob(base64);
             const bytes = new Uint8Array(binaryString.length);
             for (let i = 0; i < binaryString.length; i++) {
               bytes[i] = binaryString.charCodeAt(i);
             }
-            data = bytes;
+            data = bytes.buffer;
           } else {
             // Try to parse as base64
             try {
@@ -48,7 +53,7 @@ export const PDFReader: React.FC<PDFReaderProps> = ({ file }) => {
               for (let i = 0; i < binaryString.length; i++) {
                 bytes[i] = binaryString.charCodeAt(i);
               }
-              data = bytes;
+              data = bytes.buffer;
             } catch {
               throw new Error("Invalid PDF data format");
             }
@@ -163,4 +168,3 @@ export const PDFReader: React.FC<PDFReaderProps> = ({ file }) => {
     </div>
   );
 };
-

@@ -19,7 +19,12 @@ import { DocumentFile, TabType } from "./types";
 import { ToolbarButton } from "./components/toolbar";
 import { FileTab } from "./components/file-tab";
 import { ContentArea } from "./components/content";
-import { detectFileType, isEditable, hasPreview, isBinary } from "./utils/fileType";
+import {
+  detectFileType,
+  isEditable,
+  hasPreview,
+  isBinary,
+} from "./utils/fileType";
 
 const DocumentReader: React.FC = () => {
   // State for multiple files
@@ -92,7 +97,12 @@ const DocumentReader: React.FC = () => {
     if (files.length === 1) {
       // If closing the last file, just clear it instead of removing
       setFiles([
-        { id: Date.now().toString(), name: "Untitled.md", content: "", fileType: "markdown" },
+        {
+          id: Date.now().toString(),
+          name: "Untitled.md",
+          content: "",
+          fileType: "markdown",
+        },
       ]);
       return;
     }
@@ -160,20 +170,29 @@ const DocumentReader: React.FC = () => {
     const element = document.createElement("a");
     let blob: Blob;
     let mimeType: string;
-    let filename = activeFile.name;
+    const filename = activeFile.name;
 
     if (isBinary(activeFile.fileType)) {
       // Handle binary files
       if (activeFile.rawData) {
-        const data = activeFile.rawData instanceof ArrayBuffer
-          ? activeFile.rawData
-          : activeFile.rawData.buffer;
+        let data: Uint8Array;
+        if (activeFile.rawData instanceof ArrayBuffer) {
+          data = new Uint8Array(activeFile.rawData);
+        } else {
+          // Create a new Uint8Array with a proper ArrayBuffer by copying
+          const uint8Array = activeFile.rawData;
+          const newBuffer = new ArrayBuffer(uint8Array.byteLength);
+          data = new Uint8Array(newBuffer);
+          data.set(uint8Array);
+        }
         if (activeFile.fileType === "pdf") {
           mimeType = "application/pdf";
         } else {
-          mimeType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+          mimeType =
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
         }
-        blob = new Blob([data], { type: mimeType });
+        // Type assertion to fix ArrayBufferLike issue
+        blob = new Blob([data as Uint8Array<ArrayBuffer>], { type: mimeType });
       } else {
         // Fallback: try to extract from base64 data URL
         if (activeFile.content.startsWith("data:")) {
@@ -183,9 +202,10 @@ const DocumentReader: React.FC = () => {
           for (let i = 0; i < binaryString.length; i++) {
             bytes[i] = binaryString.charCodeAt(i);
           }
-          mimeType = activeFile.fileType === "pdf" 
-            ? "application/pdf"
-            : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+          mimeType =
+            activeFile.fileType === "pdf"
+              ? "application/pdf"
+              : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
           blob = new Blob([bytes], { type: mimeType });
         } else {
           // Fallback to text
