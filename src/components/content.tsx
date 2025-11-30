@@ -11,16 +11,29 @@ export const ContentArea: React.FC<ContentAreaProp> = ({
 }) => {
   const [editorWidth, setEditorWidth] = useState(50); // Percentage
   const [isResizing, setIsResizing] = useState(false);
+  const [isLargeScreen, setIsLargeScreen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // Detect if we're on a large screen (md breakpoint: 768px)
+  useEffect(() => {
+    const checkScreenSize = () => {
+      setIsLargeScreen(window.innerWidth >= 768);
+    };
+
+    checkScreenSize();
+    window.addEventListener("resize", checkScreenSize);
+    return () => window.removeEventListener("resize", checkScreenSize);
+  }, []);
+
   const handleMouseDown = (e: React.MouseEvent) => {
+    if (!isLargeScreen) return; // Only allow resizing on large screens
     e.preventDefault();
     setIsResizing(true);
   };
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      if (!isResizing || !containerRef.current) return;
+      if (!isResizing || !containerRef.current || !isLargeScreen) return;
 
       const containerRect = containerRef.current.getBoundingClientRect();
       const newWidth =
@@ -48,7 +61,7 @@ export const ContentArea: React.FC<ContentAreaProp> = ({
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
     };
-  }, [isResizing]);
+  }, [isResizing, isLargeScreen]);
 
   return (
     <div ref={containerRef} className="flex-1 flex overflow-hidden relative">
@@ -56,8 +69,12 @@ export const ContentArea: React.FC<ContentAreaProp> = ({
       <div
         className={`bg-white h-full overflow-hidden flex flex-col ${
           activeTab === "preview" ? "hidden md:flex" : "flex"
-        }`}
-        style={{ width: `${editorWidth}%`, minWidth: "20%", maxWidth: "80%" }}
+        } flex-1 md:flex-none`}
+        style={
+          isLargeScreen
+            ? { width: `${editorWidth}%`, minWidth: "20%", maxWidth: "80%" }
+            : undefined
+        }
       >
         <textarea
           ref={textareaRef}
@@ -77,7 +94,7 @@ export const ContentArea: React.FC<ContentAreaProp> = ({
       </div>
 
       {/* Resizer - Only visible on large screens when both panes are visible */}
-      {activeTab === "write" && (
+      {activeTab === "write" && isLargeScreen && (
         <div
           className={`hidden md:block w-1 bg-slate-200 hover:bg-blue-500 cursor-col-resize transition-colors relative group ${
             isResizing ? "bg-blue-500" : ""
@@ -92,8 +109,12 @@ export const ContentArea: React.FC<ContentAreaProp> = ({
       <div
         className={`bg-slate-50 h-full overflow-y-auto ${
           activeTab === "write" ? "hidden md:block" : "block"
-        }`}
-        style={{ width: `${100 - editorWidth}%`, minWidth: "20%" }}
+        } flex-1 md:flex-none`}
+        style={
+          isLargeScreen
+            ? { width: `${100 - editorWidth}%`, minWidth: "20%" }
+            : undefined
+        }
       >
         <div className="max-w-3xl mx-auto p-6 min-h-full">
           {markedLoaded ? (
