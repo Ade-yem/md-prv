@@ -2,7 +2,6 @@ import { useState, useRef, useEffect } from "react";
 import { ContentAreaProp } from "../types";
 import { PDFReader } from "./pdf-reader";
 import { WordReader } from "./word-reader";
-import { RTFEditor } from "./rtf-editor";
 
 export const ContentArea: React.FC<ContentAreaProp> = ({
   activeTab,
@@ -73,16 +72,6 @@ export const ContentArea: React.FC<ContentAreaProp> = ({
 
   if (activeFile.fileType === "word") {
     return <WordReader file={activeFile} />;
-  }
-
-  if (activeFile.fileType === "rtf") {
-    return (
-      <RTFEditor
-        file={activeFile}
-        activeTab={activeTab}
-        handleUpdateContent={handleUpdateContent}
-      />
-    );
   }
 
   // Markdown editor (default)

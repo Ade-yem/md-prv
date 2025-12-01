@@ -4,8 +4,9 @@ import { DocumentFile } from "../types";
 import "../AnnotationLayer.css";
 import "../TextLayer.css";
 
-// Set up PDF.js worker
-pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
+// Set up PDF.js worker - use unpkg CDN with the version from the installed package
+// This ensures version compatibility with the installed pdfjs-dist package
+pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 interface PDFReaderProps {
   file: DocumentFile;
@@ -20,6 +21,7 @@ export const PDFReader: React.FC<PDFReaderProps> = ({ file }) => {
 
   useEffect(() => {
     // Convert file content/rawData to ArrayBuffer for PDF.js
+    // Always create a new ArrayBuffer copy to avoid detached buffer issues
     const loadPdf = async () => {
       try {
         setLoading(true);
@@ -27,37 +29,38 @@ export const PDFReader: React.FC<PDFReaderProps> = ({ file }) => {
 
         let data: ArrayBuffer;
         if (file.rawData) {
+          let sourceArray: Uint8Array;
           if (file.rawData instanceof ArrayBuffer) {
-            data = file.rawData;
+            // Create a copy to avoid detached buffer issues
+            sourceArray = new Uint8Array(file.rawData);
           } else {
-            // Uint8Array - create a new ArrayBuffer by copying the data
-            const uint8Array = file.rawData;
-            data = new ArrayBuffer(uint8Array.byteLength);
-            new Uint8Array(data).set(uint8Array);
+            // Already a Uint8Array
+            sourceArray = file.rawData;
           }
+          // Always create a new ArrayBuffer copy
+          data = new ArrayBuffer(sourceArray.byteLength);
+          new Uint8Array(data).set(sourceArray);
         } else {
           // If content is base64 or data URL, parse it
+          let binaryString: string;
           if (file.content.startsWith("data:")) {
-            const base64 = file.content.split(",")[1];
-            const binaryString = atob(base64);
-            const bytes = new Uint8Array(binaryString.length);
-            for (let i = 0; i < binaryString.length; i++) {
-              bytes[i] = binaryString.charCodeAt(i);
-            }
-            data = bytes.buffer;
+            binaryString = atob(file.content.split(",")[1]);
           } else {
             // Try to parse as base64
             try {
-              const binaryString = atob(file.content);
-              const bytes = new Uint8Array(binaryString.length);
-              for (let i = 0; i < binaryString.length; i++) {
-                bytes[i] = binaryString.charCodeAt(i);
-              }
-              data = bytes.buffer;
+              binaryString = atob(file.content);
             } catch {
               throw new Error("Invalid PDF data format");
             }
           }
+          // Create a new ArrayBuffer and copy the data
+          const bytes = new Uint8Array(binaryString.length);
+          for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+          }
+          // Create a new ArrayBuffer copy instead of using bytes.buffer
+          data = new ArrayBuffer(bytes.byteLength);
+          new Uint8Array(data).set(bytes);
         }
 
         setPdfData(data);
@@ -118,7 +121,7 @@ export const PDFReader: React.FC<PDFReaderProps> = ({ file }) => {
   }
 
   return (
-    <div className="h-full flex flex-col bg-slate-50">
+    <div className="h-full overflow-y-auto flex flex-col bg-slate-50">
       {/* PDF Controls */}
       {numPages && (
         <div className="bg-white border-b border-slate-200 px-4 py-2 flex items-center justify-between sticky top-0 z-10">

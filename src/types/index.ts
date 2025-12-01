@@ -18,7 +18,7 @@ export interface ToolbarButtonProps {
     label: string;
 }
 
-export type FileType = "markdown" | "pdf" | "word" | "rtf";
+export type FileType = "markdown" | "pdf" | "word";
 
 export interface DocumentFile {
     id: string;

@@ -128,9 +128,18 @@ const DocumentReader: React.FC = () => {
         reader.onload = (e: ProgressEvent<FileReader>) => {
           const arrayBuffer = e.target?.result;
           if (arrayBuffer instanceof ArrayBuffer) {
-            // Convert to base64 for storage, or store as ArrayBuffer
+            // Convert to base64 for storage in chunks to avoid stack overflow
             const uint8Array = new Uint8Array(arrayBuffer);
-            const base64 = btoa(String.fromCharCode(...uint8Array));
+            let binaryString = "";
+            const chunkSize = 8192; // Process in 8KB chunks
+            for (let i = 0; i < uint8Array.length; i += chunkSize) {
+              const chunk = uint8Array.subarray(i, i + chunkSize);
+              binaryString += String.fromCharCode.apply(
+                null,
+                Array.from(chunk)
+              );
+            }
+            const base64 = btoa(binaryString);
             const newFile: DocumentFile = {
               id: newId,
               name: file.name,
@@ -216,8 +225,6 @@ const DocumentReader: React.FC = () => {
       // Handle text files
       if (activeFile.fileType === "markdown") {
         mimeType = "text/markdown";
-      } else if (activeFile.fileType === "rtf") {
-        mimeType = "application/rtf";
       } else {
         mimeType = "text/plain";
       }

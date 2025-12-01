@@ -5,7 +5,7 @@ import { FileType } from "../types";
  */
 export function detectFileType(filename: string): FileType {
   const extension = filename.toLowerCase().split('.').pop() || '';
-  
+
   switch (extension) {
     case 'md':
     case 'markdown':
@@ -15,8 +15,6 @@ export function detectFileType(filename: string): FileType {
     case 'doc':
     case 'docx':
       return 'word';
-    case 'rtf':
-      return 'rtf';
     default:
       // Default to markdown for unknown extensions
       return 'markdown';
@@ -27,14 +25,14 @@ export function detectFileType(filename: string): FileType {
  * Checks if a file type supports editing
  */
 export function isEditable(fileType: FileType): boolean {
-  return fileType === 'markdown' || fileType === 'rtf';
+  return fileType === 'markdown';
 }
 
 /**
  * Checks if a file type supports preview
  */
 export function hasPreview(fileType: FileType): boolean {
-  return fileType === 'markdown' || fileType === 'rtf';
+  return fileType === 'markdown';
 }
 
 /**
