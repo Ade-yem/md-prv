@@ -1,282 +1,96 @@
-import React, { useState, useEffect, useRef } from "react";
-import {
-  FileUp,
-  Download,
-  Type,
-  Bold,
-  Italic,
-  List,
-  Code,
-  Quote,
-  Link as LinkIcon,
-  Eye,
-  PenTool,
-  Trash2,
-  FileText,
-  Plus,
-} from "lucide-react";
-import { DocumentFile, TabType } from "./types";
-import { ToolbarButton } from "./components/toolbar";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import React, { useEffect, useRef, useState } from "react";
+import { FileUp, Download, Eye, PenTool, FileText, Plus } from "lucide-react";
+import { ToolBar } from "./components/toolbar";
 import { FileTab } from "./components/file-tab";
 import { ContentArea } from "./components/content";
-import {
-  detectFileType,
-  isEditable,
-  hasPreview,
-  isBinary,
-} from "./utils/fileType";
+import { isEditable, hasPreview } from "./utils/fileType";
+import { useStorage } from "./hooks/useStorage";
+import { useFileManagement } from "./hooks/useFileManagement";
+import { useDragAndDrop } from "./hooks/useDragAndDrop";
 
 const DocumentReader: React.FC = () => {
-  // State for multiple files
-  const [files, setFiles] = useState<DocumentFile[]>([
-    {
-      id: "1",
-      name: "Welcome.md",
-      content:
-        "# Welcome to Document Reader\n\nStart typing on the **left** to see the preview on the **right**.\n\n## Supported Formats\n- **Markdown**: Editor + Preview\n- **PDF**: Reader only\n- **Word (.doc/.docx)**: Reader only\n- **RTF**: Editor + Preview\n\n## Multi-Tab Features\n- Click the `+` icon to add a new file\n- Click `x` on a tab to close it\n- Import opens a new tab automatically\n\n```javascript\nconsole.log('Hello World');\n```",
-      fileType: "markdown",
-    },
-  ]);
+  const {
+    files,
+    activeFileId,
+    activeTab,
+    isInitialized,
+    setFiles,
+    setActiveFileId,
+    setActiveTab,
+  } = useStorage();
 
-  const [activeFileId, setActiveFileId] = useState<string>("1");
-  const [activeTab, setActiveTab] = useState<TabType>("write"); // Mobile toggle
-  const [markedLoaded, setMarkedLoaded] = useState<boolean>(false);
+  const {
+    fileInputRef,
+    handleUpdateContent,
+    handleUpdateName,
+    handleNewFile,
+    handleCloseFile,
+    handleFileUpload,
+    handleDownload,
+    handleTriggerFileUpload,
+  } = useFileManagement({
+    files,
+    activeFileId,
+    setFiles,
+    setActiveFileId,
+  });
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { isDragging, handleDragOver, handleDragLeave, handleDrop } =
+    useDragAndDrop({
+      onFileProcessed: (newFile) => {
+        setFiles((prev) => [...prev, newFile]);
+        setActiveFileId(newFile.id);
+      },
+    });
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [markedLoaded, setMarkedLoaded] = useState<boolean>(false);
 
   // Derived state for the currently active file
   const activeFile = files.find((f) => f.id === activeFileId) || files[0];
 
-  // Load 'marked' library dynamically
+  // Load 'marked' library dynamically (bundled for offline support)
   useEffect(() => {
-    const script = document.createElement("script");
-    script.src = "https://cdn.jsdelivr.net/npm/marked/marked.min.js";
-    script.async = true;
-    script.onload = () => {
-      setMarkedLoaded(true);
-    };
-    document.body.appendChild(script);
-
-    return () => {
-      document.body.removeChild(script);
-    };
+    import("marked")
+      .then((markedModule) => {
+        const { marked } = markedModule;
+        // Set marked on window for compatibility
+        (window as any).marked = marked;
+        setMarkedLoaded(true);
+      })
+      .catch((error) => {
+        console.error("Failed to load marked library:", error);
+      });
   }, []);
 
-  // --- File Management ---
-
-  const handleUpdateContent = (newContent: string) => {
-    setFiles((prev) =>
-      prev.map((f) =>
-        f.id === activeFileId ? { ...f, content: newContent } : f
-      )
-    );
-  };
-
-  const handleUpdateName = (newName: string) => {
-    setFiles((prev) =>
-      prev.map((f) => (f.id === activeFileId ? { ...f, name: newName } : f))
-    );
-  };
-
-  const handleNewFile = () => {
-    const newId = Date.now().toString();
-    const newFile: DocumentFile = {
-      id: newId,
-      name: "Untitled.md",
-      content: "",
-      fileType: "markdown",
-    };
-    setFiles([...files, newFile]);
-    setActiveFileId(newId);
-  };
-
-  const handleCloseFile = (e: React.MouseEvent, idToDelete: string) => {
-    e.stopPropagation(); // Prevent switching to the tab we are closing
-
-    if (files.length === 1) {
-      // If closing the last file, just clear it instead of removing
-      setFiles([
-        {
-          id: Date.now().toString(),
-          name: "Untitled.md",
-          content: "",
-          fileType: "markdown",
-        },
-      ]);
-      return;
-    }
-
-    const newFiles = files.filter((f) => f.id !== idToDelete);
-    setFiles(newFiles);
-
-    // If we closed the active file, switch to the last one available
-    if (activeFileId === idToDelete) {
-      setActiveFileId(newFiles[newFiles.length - 1].id);
-    }
-  };
-
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      const fileType = detectFileType(file.name);
-      const newId = Date.now().toString();
-
-      if (isBinary(fileType)) {
-        // Handle binary files (PDF, Word)
-        const reader = new FileReader();
-        reader.onload = (e: ProgressEvent<FileReader>) => {
-          const arrayBuffer = e.target?.result;
-          if (arrayBuffer instanceof ArrayBuffer) {
-            // Convert to base64 for storage in chunks to avoid stack overflow
-            const uint8Array = new Uint8Array(arrayBuffer);
-            let binaryString = "";
-            const chunkSize = 8192; // Process in 8KB chunks
-            for (let i = 0; i < uint8Array.length; i += chunkSize) {
-              const chunk = uint8Array.subarray(i, i + chunkSize);
-              binaryString += String.fromCharCode.apply(
-                null,
-                Array.from(chunk)
-              );
-            }
-            const base64 = btoa(binaryString);
-            const newFile: DocumentFile = {
-              id: newId,
-              name: file.name,
-              content: `data:application/octet-stream;base64,${base64}`,
-              fileType,
-              rawData: arrayBuffer,
-            };
-            setFiles([...files, newFile]);
-            setActiveFileId(newId);
-          }
-        };
-        reader.readAsArrayBuffer(file);
-      } else {
-        // Handle text files (Markdown, RTF)
-        const reader = new FileReader();
-        reader.onload = (e: ProgressEvent<FileReader>) => {
-          const text = e.target?.result;
-          if (typeof text === "string") {
-            const newFile: DocumentFile = {
-              id: newId,
-              name: file.name,
-              content: text,
-              fileType,
-            };
-            setFiles([...files, newFile]);
-            setActiveFileId(newId);
-          }
-        };
-        reader.readAsText(file);
-      }
-      // Reset input so same file can be selected again if needed
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  };
-
-  const handleDownload = () => {
-    const element = document.createElement("a");
-    let blob: Blob;
-    let mimeType: string;
-    const filename = activeFile.name;
-
-    if (isBinary(activeFile.fileType)) {
-      // Handle binary files
-      if (activeFile.rawData) {
-        let data: Uint8Array;
-        if (activeFile.rawData instanceof ArrayBuffer) {
-          data = new Uint8Array(activeFile.rawData);
-        } else {
-          // Create a new Uint8Array with a proper ArrayBuffer by copying
-          const uint8Array = activeFile.rawData;
-          const newBuffer = new ArrayBuffer(uint8Array.byteLength);
-          data = new Uint8Array(newBuffer);
-          data.set(uint8Array);
-        }
-        if (activeFile.fileType === "pdf") {
-          mimeType = "application/pdf";
-        } else {
-          mimeType =
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-        }
-        // Type assertion to fix ArrayBufferLike issue
-        blob = new Blob([data as Uint8Array<ArrayBuffer>], { type: mimeType });
-      } else {
-        // Fallback: try to extract from base64 data URL
-        if (activeFile.content.startsWith("data:")) {
-          const base64 = activeFile.content.split(",")[1];
-          const binaryString = atob(base64);
-          const bytes = new Uint8Array(binaryString.length);
-          for (let i = 0; i < binaryString.length; i++) {
-            bytes[i] = binaryString.charCodeAt(i);
-          }
-          mimeType =
-            activeFile.fileType === "pdf"
-              ? "application/pdf"
-              : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-          blob = new Blob([bytes], { type: mimeType });
-        } else {
-          // Fallback to text
-          blob = new Blob([activeFile.content], { type: "text/plain" });
-        }
-      }
-    } else {
-      // Handle text files
-      if (activeFile.fileType === "markdown") {
-        mimeType = "text/markdown";
-      } else {
-        mimeType = "text/plain";
-      }
-      blob = new Blob([activeFile.content], { type: mimeType });
-    }
-
-    element.href = URL.createObjectURL(blob);
-    element.download = filename;
-    document.body.appendChild(element);
-    element.click();
-    document.body.removeChild(element);
-    URL.revokeObjectURL(element.href);
-  };
-
-  // --- Editor Operations ---
-
-  const insertSyntax = (prefix: string, suffix: string = "") => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-
-    const currentContent = activeFile.content;
-    const selectedText = currentContent.substring(start, end);
-    const beforeText = currentContent.substring(0, start);
-    const afterText = currentContent.substring(end);
-
-    const newText = `${beforeText}${prefix}${selectedText}${suffix}${afterText}`;
-    handleUpdateContent(newText);
-
-    // Reset cursor position and focus
-    setTimeout(() => {
-      textarea.focus();
-      textarea.setSelectionRange(start + prefix.length, end + prefix.length);
-    }, 0);
-  };
-
   const getParsedMarkdown = (): { __html: string } => {
-    if (!markedLoaded || !window.marked) {
+    if (!markedLoaded || !(window as any).marked) {
       return { __html: "Loading parser..." };
     }
-    window.marked.setOptions({ gfm: true, breaks: true });
-    return { __html: window.marked.parse(activeFile.content) };
+    const marked = (window as any).marked;
+    marked.setOptions({ gfm: true, breaks: true });
+    return { __html: marked.parse(activeFile.content) };
   };
 
-  const handleTriggerFileUpload = () => {
-    fileInputRef.current?.click();
-  };
+  // Don't render until initialized to prevent undefined activeFile
+  if (!isInitialized || !activeFile) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-slate-50">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
 
   return (
-    <div className="flex flex-col h-screen bg-slate-50 text-slate-800 font-sans overflow-hidden">
+    <div
+      className={`flex flex-col h-screen bg-slate-50 text-slate-800 font-sans overflow-hidden relative ${
+        isDragging ? "bg-blue-50" : ""
+      }`}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
       {/* --- Main Header --- */}
       <header className="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between shadow-sm z-20 relative">
         <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -345,53 +159,11 @@ const DocumentReader: React.FC = () => {
 
       {/* --- Toolbar --- (Only show for markdown files) */}
       {activeFile.fileType === "markdown" && (
-        <div className="bg-white border-b border-slate-200 px-2 sm:px-4 py-2 flex items-center gap-1 sm:gap-2 overflow-x-auto z-10 shadow-sm">
-          <ToolbarButton
-            icon={Bold}
-            label="Bold"
-            onClick={() => insertSyntax("**", "**")}
-          />
-          <ToolbarButton
-            icon={Italic}
-            label="Italic"
-            onClick={() => insertSyntax("*", "*")}
-          />
-          <div className="w-px h-6 bg-slate-200 mx-1"></div>
-          <ToolbarButton
-            icon={Type}
-            label="Heading"
-            onClick={() => insertSyntax("## ")}
-          />
-          <ToolbarButton
-            icon={Quote}
-            label="Quote"
-            onClick={() => insertSyntax("> ")}
-          />
-          <ToolbarButton
-            icon={List}
-            label="List"
-            onClick={() => insertSyntax("- ")}
-          />
-          <div className="w-px h-6 bg-slate-200 mx-1"></div>
-          <ToolbarButton
-            icon={Code}
-            label="Code Block"
-            onClick={() => insertSyntax("```\n", "\n```")}
-          />
-          <ToolbarButton
-            icon={LinkIcon}
-            label="Link"
-            onClick={() => insertSyntax("[", "](url)")}
-          />
-          <div className="flex-1"></div>
-          <button
-            onClick={() => handleUpdateContent("")}
-            className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors"
-            title="Clear Current File"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
-        </div>
+        <ToolBar
+          textareaRef={textareaRef}
+          activeFile={activeFile}
+          handleUpdateContent={handleUpdateContent}
+        />
       )}
 
       {/* --- Mobile View Toggle --- (Only show for editable files with preview) */}
@@ -429,7 +201,23 @@ const DocumentReader: React.FC = () => {
         markedLoaded={markedLoaded}
         getParsedMarkdown={getParsedMarkdown}
       />
+
+      {/* Drag and Drop Overlay */}
+      {isDragging && (
+        <div className="absolute inset-0 bg-blue-600/10 border-4 border-dashed border-blue-600 z-50 flex items-center justify-center pointer-events-none">
+          <div className="bg-white rounded-lg shadow-xl p-8 flex flex-col items-center gap-4">
+            <FileUp className="w-16 h-16 text-blue-600" />
+            <p className="text-xl font-semibold text-slate-800">
+              Drop file like its hot 🔥
+            </p>
+            <p className="text-sm text-slate-500">
+              Supported: .md, .markdown, .pdf, .doc, .docx
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+
 export default DocumentReader;

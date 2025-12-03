@@ -7,6 +7,11 @@ import "../TextLayer.css";
 // Set up PDF.js worker - use unpkg CDN with the version from the installed package
 // This ensures version compatibility with the installed pdfjs-dist package
 pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+const options = {
+  cMapUrl: `https://unpkg.com/pdfjs-dist@${pdfjs.version}/cmaps/`,
+  wasmUrl: `https://unpkg.com/pdfjs-dist@${pdfjs.version}/wasm/`,
+  standardFontDataUrl: `https://unpkg.com/pdfjs-dist@${pdfjs.version}/standard_fonts/`,
+};
 
 interface PDFReaderProps {
   file: DocumentFile;
@@ -150,6 +155,7 @@ export const PDFReader: React.FC<PDFReaderProps> = ({ file }) => {
       {/* PDF Viewer */}
       <div className="flex-1 overflow-y-auto p-4 flex justify-center">
         <Document
+          options={options}
           file={pdfData}
           onLoadSuccess={onDocumentLoadSuccess}
           onLoadError={onDocumentLoadError}
