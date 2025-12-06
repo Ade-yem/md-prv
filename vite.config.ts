@@ -36,11 +36,6 @@ export default defineConfig({
           },
         ],
       },
-      icon: {
-        source: 'public/icon.svg',
-        sizes: [192, 512],
-        destination: '/',
-      },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
         runtimeCaching: [
